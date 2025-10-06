@@ -1,14 +1,21 @@
 package archive
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
+	"github.com/bodgit/sevenzip"
 	"github.com/mholt/archives"
+	"github.com/nwaples/rardecode/v2"
 	"github.com/spf13/cobra"
 )
+
+const layout = "2006-01-02 15:04:05 -0700 MST"
 
 func ListCommand() *cobra.Command {
 	var short bool
@@ -37,8 +44,9 @@ func ListCommand() *cobra.Command {
 			}
 
 			var total int64
+			padding := 8
 
-			err = extractor.Extract(context.Background(), stream, func(ctx context.Context, info archives.FileInfo) error {
+			err = extractor.Extract(context.Background(), stream, func(_ context.Context, info archives.FileInfo) error {
 				total++
 
 				if short {
@@ -46,12 +54,51 @@ func ListCommand() *cobra.Command {
 					return nil
 				}
 
-				fmt.Printf("%s\t%d\t%s\t%s\n",
-					info.Mode(),
-					info.Size(),
-					info.ModTime(),
-					info.NameInArchive,
-				)
+				padding = max(padding, len(strconv.FormatInt(info.Size(), 10)))
+				template := fmt.Sprintf("%%%dd", padding)
+				fsize := fmt.Sprintf(template, info.Size())
+
+				switch h := info.Header.(type) {
+				case zip.FileHeader:
+					fmt.Printf("%s\t%d\t%s\t%s\t%s\n",
+						info.Mode(),
+						h.Method,
+						fsize,
+						info.ModTime().Format(layout),
+						h.Name,
+					)
+				case *tar.Header:
+					fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\n",
+						info.Mode(),
+						h.Uname,
+						h.Gname,
+						fsize,
+						info.ModTime().Format(layout),
+						h.Name,
+					)
+				case *rardecode.FileHeader:
+					fmt.Printf("%s\t%d\t%s\t%s\t%s\n",
+						info.Mode(),
+						int(h.HostOS),
+						fsize,
+						info.ModTime().Format(layout),
+						h.Name,
+					)
+				case sevenzip.FileHeader:
+					fmt.Printf("%s\t%s\t%s\t%s\n",
+						info.Mode(),
+						fsize,
+						info.ModTime().Format(layout),
+						f.Name(),
+					)
+				default:
+					fmt.Printf("%s\t%s\t%s\t?/%s\n",
+						info.Mode(),
+						fsize,
+						info.ModTime().Format(layout),
+						f.Name(), // we don't know full path from this
+					)
+				}
 
 				return nil
 			})

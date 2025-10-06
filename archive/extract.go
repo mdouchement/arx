@@ -41,7 +41,7 @@ func ExtractCommand() *cobra.Command {
 				return errors.New("unsupported archive")
 			}
 
-			return extractor.Extract(context.Background(), stream, func(ctx context.Context, info archives.FileInfo) error {
+			return extractor.Extract(context.Background(), stream, func(_ context.Context, info archives.FileInfo) error {
 				destination := filepath.Join(dst, info.NameInArchive)
 
 				if info.IsDir() {
